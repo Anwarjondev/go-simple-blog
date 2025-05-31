@@ -21,7 +21,6 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-          registry: docker.io
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -29,8 +28,6 @@ jobs:
           context: .
           push: true
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/go-blog:latest
-          cache-from: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/go-blog:buildcache
-          cache-to: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/go-blog:buildcache,mode=max
 
   deploy:
     runs-on: ubuntu-latest
