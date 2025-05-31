@@ -2,10 +2,15 @@
 Test how create a CRUD using Go
 
 ### Installation
-Create the database using the bd.sql file.
-
-After that run the project usign the next command[on the root folder]:
+1. Install PostgreSQL if you haven't already
+2. Create the database using the bd.sql file:
+```bash
+psql -U postgres -f bd.sql
 ```
+
+After that run the project using the next command [on the root folder]:
+```bash
+go mod tidy
 go run ./main.go
 ```
 
@@ -19,8 +24,8 @@ The styles are using the BootstrapV5 framework
     /posts
 
 ### Packages
-For Mysql conection: 
-- github.com/go-sql-driver/mysql 
+For PostgreSQL connection: 
+- github.com/lib/pq
 - database/sql
 
 For Logs

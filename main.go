@@ -8,41 +8,82 @@ import (
 	"text/template"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/lib/pq"
 )
 
 var templates = template.Must(template.ParseGlob("views/**/*"))
 
-func DBConection() (conecction *sql.DB) {
-	Driver := "mysql"
-	User := "root"
-	Password := ""
+func DBConnection() (*sql.DB, error) {
+	User := "postgres"
+	Password := "1234"
 	Host := "localhost"
-	Port := "3306"
+	Port := "5432"
 	Database := "go-simple-blog"
 
-	conection, err := sql.Open(Driver, User+":"+Password+"@tcp("+Host+":"+Port+")/"+Database)
+	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		Host, Port, User, Password, Database)
 
+	db, err := sql.Open("postgres", connStr)
 	if err != nil {
-		panic(err.Error())
+		return nil, fmt.Errorf("error opening database: %v", err)
 	}
-	return conection
+
+	// Test the connection
+	if err := db.Ping(); err != nil {
+		return nil, fmt.Errorf("error connecting to the database: %v", err)
+	}
+
+	// Create table if it doesn't exist
+	createTableQuery := `
+	CREATE TABLE IF NOT EXISTS posts (
+		id SERIAL PRIMARY KEY,
+		title VARCHAR(255) NOT NULL DEFAULT 'Empty article :P',
+		content TEXT NOT NULL,
+		author VARCHAR(50) NOT NULL DEFAULT 'Neil Amnstrong',
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);`
+
+	_, err = db.Exec(createTableQuery)
+	if err != nil {
+		return nil, fmt.Errorf("error creating table: %v", err)
+	}
+
+	return db, nil
 }
 
 func main() {
+	// Initialize database connection
+	db, err := DBConnection()
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer db.Close()
 
-	http.HandleFunc("/", Home)
-	http.HandleFunc("/show", Show)
+	// Register routes
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		Home(w, r, db)
+	})
+	http.HandleFunc("/show", func(w http.ResponseWriter, r *http.Request) {
+		Show(w, r, db)
+	})
 	http.HandleFunc("/create", Create)
-	http.HandleFunc("/store", Store)
-	http.HandleFunc("/edit", Edit)
-	http.HandleFunc("/update", Update)
-	http.HandleFunc("/delete", Delete)
+	http.HandleFunc("/store", func(w http.ResponseWriter, r *http.Request) {
+		Store(w, r, db)
+	})
+	http.HandleFunc("/edit", func(w http.ResponseWriter, r *http.Request) {
+		Edit(w, r, db)
+	})
+	http.HandleFunc("/update", func(w http.ResponseWriter, r *http.Request) {
+		Update(w, r, db)
+	})
+	http.HandleFunc("/delete", func(w http.ResponseWriter, r *http.Request) {
+		Delete(w, r, db)
+	})
 
-	log.Println("Listen on the port 8000...")
-
-	log.Fatal(http.ListenAndServe(":8000", nil))
-
+	log.Println("Server starting on port 8000...")
+	if err := http.ListenAndServe(":8000", nil); err != nil {
+		log.Fatalf("Server failed to start: %v", err)
+	}
 }
 
 type Post struct {
@@ -53,161 +94,192 @@ type Post struct {
 	CreatedAt string
 }
 
-// Functions
-func Home(w http.ResponseWriter, r *http.Request) {
-
-	DBConection := DBConection()
-	posts, err := DBConection.Query("SELECT * FROM posts")
+func Home(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+	posts, err := db.Query("SELECT * FROM posts")
 	if err != nil {
-		panic(err.Error())
+		http.Error(w, "Error fetching posts", http.StatusInternalServerError)
+		log.Printf("Error fetching posts: %v", err)
+		return
 	}
+	defer posts.Close()
 
-	post := Post{}
 	postArrays := []Post{}
-
 	for posts.Next() {
-		var id int
-		var title, content, author, created_at string
-		err = posts.Scan(&id, &title, &content, &author, &created_at)
+		var post Post
+		var created_at string
+		err = posts.Scan(&post.Id, &post.Title, &post.Content, &post.Author, &created_at)
 		if err != nil {
-			panic(err.Error())
+			http.Error(w, "Error scanning post", http.StatusInternalServerError)
+			log.Printf("Error scanning post: %v", err)
+			return
 		}
-		post.Id = id
-		post.Title = title
-		post.Content = content[:450] + "..."
-		post.Author = author
 		post.CreatedAt = FormatDate(created_at)
-
+		if len(post.Content) > 450 {
+			post.Content = post.Content[:450] + "..."
+		}
 		postArrays = append(postArrays, post)
 	}
-	templates.ExecuteTemplate(w, "home", postArrays)
-}
-func Show(w http.ResponseWriter, r *http.Request) {
 
+	if err = posts.Err(); err != nil {
+		http.Error(w, "Error iterating posts", http.StatusInternalServerError)
+		log.Printf("Error iterating posts: %v", err)
+		return
+	}
+
+	if err := templates.ExecuteTemplate(w, "home", postArrays); err != nil {
+		http.Error(w, "Error rendering template", http.StatusInternalServerError)
+		log.Printf("Error rendering template: %v", err)
+	}
+}
+
+func Show(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	id := r.URL.Query().Get("id")
+	if id == "" {
+		http.Error(w, "Missing post ID", http.StatusBadRequest)
+		return
+	}
 
-	DBConection := DBConection()
-	result, err := DBConection.Query("SELECT * FROM posts WHERE id = " + id + " LIMIT 1; ")
+	var post Post
+	var created_at string
+	err := db.QueryRow("SELECT * FROM posts WHERE id = $1", id).Scan(
+		&post.Id, &post.Title, &post.Content, &post.Author, &created_at)
 	if err != nil {
-		panic(err.Error())
-	}
-	post := Post{}
-
-	for result.Next() {
-		var id int
-		var title, content, author, created_at string
-
-		err = result.Scan(&id, &title, &content, &author, &created_at)
-		if err != nil {
-			panic(err.Error())
+		if err == sql.ErrNoRows {
+			http.Error(w, "Post not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Error fetching post", http.StatusInternalServerError)
+			log.Printf("Error fetching post: %v", err)
 		}
-
-		post.Id = id
-		post.Title = title
-		post.Content = content
-		post.Author = author
-		post.CreatedAt = created_at
-
+		return
 	}
-	defer result.Close()
 
-	templates.ExecuteTemplate(w, "show", post)
+	post.CreatedAt = FormatDate(created_at)
+	if err := templates.ExecuteTemplate(w, "show", post); err != nil {
+		http.Error(w, "Error rendering template", http.StatusInternalServerError)
+		log.Printf("Error rendering template: %v", err)
+	}
 }
+
 func Create(w http.ResponseWriter, r *http.Request) {
-	templates.ExecuteTemplate(w, "create", nil)
-}
-func Store(w http.ResponseWriter, r *http.Request) {
-
-	if r.Method == "POST" {
-		title := r.FormValue("title")
-		content := r.FormValue("content")
-		author := r.FormValue("author")
-
-		if title == "" || content == "" || author == "" {
-			http.Redirect(w, r, "/create", 301)
-		}
-
-		DBConection := DBConection()
-		insert, err := DBConection.Prepare("INSERT INTO posts (title, content, author) VALUES (?, ?, ?)")
-		if err != nil {
-			panic(err.Error())
-		}
-		insert.Exec(title, content, author)
-		defer insert.Close()
-
+	if err := templates.ExecuteTemplate(w, "create", nil); err != nil {
+		http.Error(w, "Error rendering template", http.StatusInternalServerError)
+		log.Printf("Error rendering template: %v", err)
 	}
-	http.Redirect(w, r, "/", 301)
 }
-func Edit(w http.ResponseWriter, r *http.Request) {
-	id := r.URL.Query().Get("id")
-	DBConection := DBConection()
-	result, err := DBConection.Query("SELECT * FROM posts WHERE id = " + id + " LIMIT 1; ")
+
+func Store(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	title := r.FormValue("title")
+	content := r.FormValue("content")
+	author := r.FormValue("author")
+
+	if title == "" || content == "" || author == "" {
+		http.Redirect(w, r, "/create", http.StatusSeeOther)
+		return
+	}
+
+	_, err := db.Exec("INSERT INTO posts (title, content, author) VALUES ($1, $2, $3)",
+		title, content, author)
 	if err != nil {
-		panic(err.Error())
+		http.Error(w, "Error creating post", http.StatusInternalServerError)
+		log.Printf("Error creating post: %v", err)
+		return
 	}
-	post := Post{}
 
-	for result.Next() {
-		var id int
-		var title, content, author, created_at string
-
-		err = result.Scan(&id, &title, &content, &author, &created_at)
-		if err != nil {
-			panic(err.Error())
-		}
-
-		post.Id = id
-		post.Title = title
-		post.Content = content
-		post.Author = author
-		post.CreatedAt = created_at
-
-	}
-	defer result.Close()
-
-	templates.ExecuteTemplate(w, "edit", post)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
-func Update(w http.ResponseWriter, r *http.Request) {
+
+func Edit(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	id := r.URL.Query().Get("id")
-
-	fmt.Println(id)
-
-	if r.Method == "POST" {
-
-		title := r.FormValue("title")
-		content := r.FormValue("content")
-		author := r.FormValue("author")
-
-		if title == "" || content == "" || author == "" {
-			http.Redirect(w, r, "/edit?id="+id, 301)
-		}
-		DBConection := DBConection()
-		update, err := DBConection.Prepare("UPDATE posts SET title = ?, content = ?, author = ? WHERE id = ?;")
-		if err != nil {
-			panic(err.Error())
-		}
-		update.Exec(title, content, author, id)
-		defer update.Close()
-
+	if id == "" {
+		http.Error(w, "Missing post ID", http.StatusBadRequest)
+		return
 	}
-	http.Redirect(w, r, "/show?id="+id, 301)
-}
-func Delete(w http.ResponseWriter, r *http.Request) {
-	id := r.URL.Query().Get("id")
-	DBConection := DBConection()
-	delete, err := DBConection.Prepare("DELETE FROM posts WHERE id = ?;")
+
+	var post Post
+	var created_at string
+	err := db.QueryRow("SELECT * FROM posts WHERE id = $1", id).Scan(
+		&post.Id, &post.Title, &post.Content, &post.Author, &created_at)
 	if err != nil {
-		panic(err.Error())
+		if err == sql.ErrNoRows {
+			http.Error(w, "Post not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Error fetching post", http.StatusInternalServerError)
+			log.Printf("Error fetching post: %v", err)
+		}
+		return
 	}
-	delete.Exec(id)
-	defer delete.Close()
 
-	http.Redirect(w, r, "/", 301)
+	post.CreatedAt = FormatDate(created_at)
+	if err := templates.ExecuteTemplate(w, "edit", post); err != nil {
+		http.Error(w, "Error rendering template", http.StatusInternalServerError)
+		log.Printf("Error rendering template: %v", err)
+	}
 }
 
-// Function to format date on this format Month day, year
+func Update(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		http.Error(w, "Missing post ID", http.StatusBadRequest)
+		return
+	}
+
+	title := r.FormValue("title")
+	content := r.FormValue("content")
+	author := r.FormValue("author")
+
+	if title == "" || content == "" || author == "" {
+		http.Redirect(w, r, "/edit?id="+id, http.StatusSeeOther)
+		return
+	}
+
+	_, err := db.Exec("UPDATE posts SET title = $1, content = $2, author = $3 WHERE id = $4",
+		title, content, author, id)
+	if err != nil {
+		http.Error(w, "Error updating post", http.StatusInternalServerError)
+		log.Printf("Error updating post: %v", err)
+		return
+	}
+
+	http.Redirect(w, r, "/show?id="+id, http.StatusSeeOther)
+}
+
+func Delete(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		http.Error(w, "Missing post ID", http.StatusBadRequest)
+		return
+	}
+
+	_, err := db.Exec("DELETE FROM posts WHERE id = $1", id)
+	if err != nil {
+		http.Error(w, "Error deleting post", http.StatusInternalServerError)
+		log.Printf("Error deleting post: %v", err)
+		return
+	}
+
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
 func FormatDate(date string) string {
-	layout := "2006-01-02 15:04:05"
-	t, _ := time.Parse(layout, date)
+	// Try parsing ISO 8601 format first
+	t, err := time.Parse(time.RFC3339, date)
+	if err != nil {
+		// If that fails, try the old format
+		t, err = time.Parse("2006-01-02 15:04:05", date)
+		if err != nil {
+			log.Printf("Error parsing date: %v", err)
+			return date
+		}
+	}
 	return t.Format("January 2, 2006")
 }
