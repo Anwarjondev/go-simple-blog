@@ -45,51 +45,13 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             # Create directory if it doesn't exist
-            mkdir -p /home/ubuntu/golang-simple-blog-app
+            mkdir -p /home/${{ secrets.EC2_USERNAME }}/golang-simple-blog-app
             
             # Copy docker-compose.yml to the server
-            cat > /home/anvarjon/Golang/golang-simple-blog-app/docker-compose.yml << 'EOL'
-            version: '3.8'
-            services:
-              app:
-                image: ${{ secrets.DOCKER_HUB_USERNAME }}/go-blog:latest
-                ports:
-                  - "8000:8000"
-                environment:
-                  - DB_HOST=db
-                  - DB_PORT=5432
-                  - DB_USER=postgres
-                  - DB_PASS=1234
-                  - DB_NAME=go-simple-blog
-                  - PORT=8000
-                depends_on:
-                  - db
-                networks:
-                  - blog-network
-
-              db:
-                image: postgres:15-alpine
-                environment:
-                  - POSTGRES_USER=postgres
-                  - POSTGRES_PASSWORD=1234
-                  - POSTGRES_DB=go-simple-blog
-                ports:
-                  - "5432:5432"
-                volumes:
-                  - postgres_data:/var/lib/postgresql/data
-                networks:
-                  - blog-network
-
-            networks:
-              blog-network:
-                driver: bridge
-
-            volumes:
-              postgres_data:
-            EOL
+            scp -i ~/.ssh/id_rsa ./golang-simple-blog-app/docker-compose.yml ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USERNAME }}/golang-simple-blog-app/docker-compose.yml
 
             # Navigate to the application directory
-            cd /home/ubuntu/golang-simple-blog-app
+            cd /home/${{ secrets.EC2_USERNAME }}/golang-simple-blog-app
             
             # Pull the latest image and restart containers
             docker-compose pull app

@@ -1,0 +1,37 @@
+version: '3.8'
+services:
+  app:
+    image: ${{ secrets.DOCKER_HUB_USERNAME }}/go-blog:latest
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASS=1234
+      - DB_NAME=go-simple-blog
+      - PORT=8000
+    depends_on:
+      - db
+    networks:
+      - blog-network
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=1234
+      - POSTGRES_DB=go-simple-blog
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - blog-network
+
+networks:
+  blog-network:
+    driver: bridge
+
+volumes:
+  postgres_data: 
