@@ -37,6 +37,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Debug docker-compose.yml presence
+        run: |
+          set -euxo pipefail
+          echo "Listing contents of golang-simple-blog-app/ in runner workspace:"
+          ls -la golang-simple-blog-app/
+          echo "Printing content of golang-simple-blog-app/docker-compose.yml:"
+          cat golang-simple-blog-app/docker-compose.yml
+
       - name: Copy docker-compose.yml via SCP
         uses: appleboy/scp-action@v0.1.4
         with:
