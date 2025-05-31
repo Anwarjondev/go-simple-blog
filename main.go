@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"text/template"
 	"time"
 
@@ -16,9 +17,13 @@ var templates = template.Must(template.ParseGlob("views/**/*"))
 func DBConnection() (*sql.DB, error) {
 	User := "postgres"
 	Password := "1234"
-	Host := "localhost"
+	Host := os.Getenv("DB_HOST")
 	Port := "5432"
 	Database := "go-simple-blog"
+
+	if User == "" || Password == "" || Host == "" || Port == "" || Database == "" {
+		log.Fatal("Database environment variables not set")
+	}
 
 	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 		Host, Port, User, Password, Database)
