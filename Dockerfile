@@ -25,7 +25,7 @@ COPY --from=builder /app/main .
 COPY --from=builder /app/views ./views
 
 # Expose port
-EXPOSE 8000
+EXPOSE 8080
 
 # Run the application
 CMD ["./main"] 
