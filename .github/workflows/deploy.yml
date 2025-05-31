@@ -89,7 +89,7 @@ jobs:
             EOL
 
             # Navigate to the application directory
-            cd /home/anvarjon/Golang/golang-simple-blog-app
+            cd /home/ubuntu/go-blog-app
             
             # Pull the latest image and restart containers
             docker-compose pull app
