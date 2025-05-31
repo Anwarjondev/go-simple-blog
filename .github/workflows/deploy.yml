@@ -80,8 +80,9 @@ jobs:
             fi
             echo "docker-compose.yml found in $PWD."
 
-            # Pull the latest image and restart containers
-            echo "Running docker-compose commands..."
+            # Set DOCKER_HUB_USERNAME environment variable and run docker-compose commands
+            echo "Setting DOCKER_HUB_USERNAME and running docker-compose..."
+            export DOCKER_HUB_USERNAME="${{ secrets.DOCKER_HUB_USERNAME }}"
             docker-compose pull app
             docker-compose down
             docker-compose up -d 

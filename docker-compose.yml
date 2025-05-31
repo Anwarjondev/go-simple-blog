@@ -1,7 +1,7 @@
 version: '3.8'
 services:
   app:
-    image: ${{ secrets.DOCKER_HUB_USERNAME }}/go-blog:latest
+    image: ${DOCKER_HUB_USERNAME}/go-blog:latest
     ports:
       - "8000:8000"
     environment:
