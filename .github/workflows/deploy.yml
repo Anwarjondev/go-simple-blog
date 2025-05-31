@@ -37,41 +37,34 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy to EC2 (Copy File Explicitly)
+      - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          host_key_checking: false # Temporarily disabled - address for production
+          fingerprint: ${{ secrets.EC2_HOST_FINGERPRINT }}
+          # Copy docker-compose.yml to the server using the action's file transfer
+          source: "golang-simple-blog-app/docker-compose.yml"
+          target: "/home/${{ secrets.EC2_USERNAME }}/golang-simple-blog-app/docker-compose.yml"
           script: |
-            # Define source and target paths
-            SOURCE_FILE="/github/workspace/golang-simple-blog-app/docker-compose.yml"
+            # Define target directory
             TARGET_DIR="/home/${{ secrets.EC2_USERNAME }}/golang-simple-blog-app"
-            TARGET_FILE="$TARGET_DIR/docker-compose.yml"
 
             # Create target directory if it doesn't exist
             mkdir -p $TARGET_DIR
             echo "Target directory $TARGET_DIR created or already exists."
 
-            # Explicitly copy the file using scp within the SSH session
-            # Note: This relies on the ssh-action properly setting up the key for scp
-            echo "Attempting to copy $SOURCE_FILE to $TARGET_FILE"
-            scp $SOURCE_FILE ${{ secrets.EC2_USERNAME }}@localhost:$TARGET_FILE
-            # Check scp exit status
-            if [ $? -ne 0 ]; then
-              echo "Error: SCP file transfer failed."
-              exit 1
-            fi
-            echo "File copied successfully."
-
             # Change to target directory
             cd $TARGET_DIR
             echo "Changed directory to $PWD"
 
-            # Verify docker-compose.yml exists after copy
+            # Verify docker-compose.yml exists after copy attempt
             if [ ! -f docker-compose.yml ]; then
-              echo "Error: docker-compose.yml not found in $PWD after explicit copy."
+              echo "Error: docker-compose.yml not found in $PWD after copy attempt."
+              # List contents for debugging if file not found
+              echo "Contents of $PWD:"
+              ls -la $PWD
               exit 1
             fi
             echo "docker-compose.yml found in $PWD."
