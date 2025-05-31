@@ -21,13 +21,16 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+          registry: docker.io
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: anwarjondev/go-blog:latest
+          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/go-blog:latest
+          cache-from: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/go-blog:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/go-blog:buildcache,mode=max
 
   deploy:
     runs-on: ubuntu-latest
@@ -51,7 +54,7 @@ jobs:
             version: '3.8'
             services:
               app:
-                image: anwarjondev/go-blog:latest
+                image: ${{ secrets.DOCKER_HUB_USERNAME }}/go-blog:latest
                 ports:
                   - "8000:8000"
                 environment:
