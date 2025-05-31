@@ -1,0 +1,14 @@
+[Unit]
+Description=Go Blog Application
+After=network.target
+
+[Service]
+Type=simple
+User=anvarjon
+WorkingDirectory=/home/anvarjon/Golang/golang-simple-blog-app
+ExecStart=/home/anvarjon/Golang/golang-simple-blog-app/main
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target 
