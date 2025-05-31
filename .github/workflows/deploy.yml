@@ -37,7 +37,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy to EC2
+      - name: Deploy to EC2 (Debug File Transfer)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -51,19 +51,13 @@ jobs:
             # Define target directory
             TARGET_DIR="/home/${{ secrets.EC2_USERNAME }}/golang-simple-blog-app"
 
-            # Create target directory if it doesn't exist (important for initial setup)
+            # Create target directory if it doesn't exist
             mkdir -p $TARGET_DIR
+            echo "Target directory $TARGET_DIR created or already exists."
 
-            # Change to target directory
-            cd $TARGET_DIR
+            # List contents of the target directory to check for the file
+            echo "Listing contents of $TARGET_DIR:"
+            ls -la $TARGET_DIR
 
-            # Verify docker-compose.yml exists (optional, but good for debugging)
-            if [ ! -f docker-compose.yml ]; then
-              echo "Error: docker-compose.yml not found in $PWD after copy attempt"
-              exit 1
-            fi
-
-            # Pull the latest image and restart containers
-            docker-compose pull app
-            docker-compose down
-            docker-compose up -d 
+            # Exit the script after listing, we are just debugging file transfer
+            exit 0 
